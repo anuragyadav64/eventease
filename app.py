@@ -86,12 +86,18 @@ def generate_qr(event_title, email):
     qr = qrcode.QRCode(version=1, box_size=10, border=5)
     qr.add_data(f"Event: {event_title}\nEmail: {email}")
     qr.make(fit=True)
+    
+    # Create an image from the QR code
+    img = qr.make_image(fill_color="black", back_color="white")
+    
     qr_dir = os.path.join("static", "qr")
     os.makedirs(qr_dir, exist_ok=True)
     safe_email = re.sub(r'[^\w\-_\.]', '_', email)
     safe_title = re.sub(r'[^\w\-_\.]', '_', event_title)
     filename = os.path.join(qr_dir, f"{safe_email}_{safe_title}.png")
-    qr.save(filename)
+    
+    # Save the image, not the QRCode object
+    img.save(filename)
     return filename
 
 def send_email(to_email, event_title, qr_path):
@@ -185,11 +191,11 @@ def dashboard():
     
     events = cur.fetchall()
     updated_events = []
+    
+    # Loop through events to update status and convert date
     for event in events:
-        # Convert string to date object
         event_date = date.fromisoformat(event[2])
         
-        # Status calculation
         if event_date < today:
             status = "Completed"
         else:
@@ -199,7 +205,6 @@ def dashboard():
         if status != event[8]:
             cur.execute("UPDATE events SET status=? WHERE id=?", (status, event[0]))
         
-        # Replace event[2] (string) with event_date (date object)
         fixed_event = (
             event[0],  # id
             event[1],  # title
@@ -208,18 +213,31 @@ def dashboard():
             event[4],  # venue
             event[5],  # category
             event[6],  # audience
-            event[7],  # participants
+            event[7],  # description (or participants? check DB schema)
             status,    # updated status
-            *event[9:] # rest of fields if any
+            *event[9:] # sub_events, college_id etc.
         )
-        
         updated_events.append(fixed_event)
+    
+    # --- Counters ---
+    total_events = len(updated_events)
+    upcoming_events = sum(1 for e in updated_events if e[8] == "Upcoming")
+    completed_events = total_events - upcoming_events
+    
+    # Total participants for this college
+    cur.execute("SELECT COUNT(*) FROM participants WHERE college_id=?", (college_id,))
+    total_participants = cur.fetchone()[0]
     
     conn.commit()
     conn.close()
     
-    return render_template("index.html", events=updated_events, today=today)
-
+    return render_template("index.html", 
+                           events=updated_events, 
+                           today=today,
+                           total_events=total_events,
+                           upcoming_events=upcoming_events,
+                           completed_events=completed_events,
+                           total_participants=total_participants)
 
 @app.route("/register/<int:event_id>", methods=["GET", "POST"])
 def register(event_id):
@@ -374,34 +392,47 @@ def my_registrations():
     if not college_id:
         return redirect("/start")
     
+    email = None
+    if request.method == "POST":
+        email = request.form.get("email")
+        if email:
+            return redirect(f"/my_registrations?email={email}")
+    
+    email = request.args.get("email")
+    
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("""
-        SELECT p.*, e.title, e.event_date, e.event_time, e.venue
-        FROM participants p
-        JOIN events e ON p.event_id = e.id
-        WHERE p.college_id=? ORDER BY e.event_date
-    """, (college_id,))
+    if email:
+        cur.execute("""
+            SELECT p.id, e.title, e.event_date, e.venue, p.role, p.sub_event
+            FROM participants p
+            JOIN events e ON p.event_id = e.id
+            WHERE p.college_id = ? AND p.email = ?
+            ORDER BY e.event_date
+        """, (college_id, email))
+    else:
+        # If no email provided, return empty list (or show all? but better to ask for email)
+        registrations = []
+        conn.close()
+        return render_template("my_registrations.html", registrations=[], email=None)
+    
     registrations = cur.fetchall()
     conn.close()
-    
-    return render_template("my_registrations.html", registrations=registrations)
+    return render_template("my_registrations.html", registrations=registrations, email=email)
 
-@app.route("/cancel_registration/<event_title>/<email>")
-def cancel_registration(event_title, email):
+@app.route("/cancel_registration/<int:participant_id>")
+def cancel_registration(participant_id):
     college_id = session.get("college_id")
     if not college_id:
         return redirect("/start")
     
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("DELETE FROM participants WHERE email=? AND college_id=? AND event_id IN (SELECT id FROM events WHERE title=? AND college_id=?)",
-                (email, college_id, event_title, college_id))
+    cur.execute("DELETE FROM participants WHERE id=? AND college_id=?", (participant_id, college_id))
     conn.commit()
     conn.close()
-    
     return redirect("/my_registrations?cancelled=1")
-
+    
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":

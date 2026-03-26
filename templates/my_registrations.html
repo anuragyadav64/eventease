@@ -10,16 +10,13 @@
 <div class="container" style="max-width:900px;">
   <div class="card shadow-lg border-0 rounded-3">
 
-    <!-- Header -->
     <div class="card-header bg-primary text-white text-center rounded-top-3">
-      <h4 class="mb-0">My Registrations ({{ email }})</h4>
+      <h4 class="mb-0">My Registrations {% if email %} ({{ email }}) {% endif %}</h4>
     </div>
 
-    <!-- Body -->
     <div class="card-body p-4">
 
       {% if registrations %}
-      <!-- Responsive Table -->
       <div class="table-responsive">
         <table class="table table-bordered table-striped align-middle">
           <thead class="table-dark">
@@ -35,15 +32,22 @@
           <tbody>
             {% for r in registrations %}
             <tr>
-              <td>{{ r[0] }}</td>
-              <td>{{ r[1] }}</td>
-              <td>{{ r[2] }}</td>
-              <td>{{ r[3] }}</td>
-              <td>{% if r[3] == "Performer" %}{{ r[4] }}{% else %}-{% endif %}</td>
+              <td>{{ r[1] }}</td>          <!-- title -->
+              <td>{{ r[2] }}</td>          <!-- date -->
+              <td>{{ r[3] }}</td>          <!-- venue -->
+              <td>{{ r[4] }}</td>          <!-- role -->
               <td>
-                <a href="/cancel_registration/{{ r[0] }}/{{ email }}" 
-                   class="btn btn-danger btn-sm fw-semibold">
-                   <i class="bi bi-x-circle"></i> Cancel
+                {% if r[4] == "Performer" %}
+                  {{ r[5] }}
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+              <td>
+                <a href="/cancel_registration/{{ r[0] }}" 
+                   class="btn btn-danger btn-sm fw-semibold"
+                   onclick="return confirm('Are you sure you want to cancel registration?');">
+                   Cancel
                 </a>
               </td>
             </tr>
@@ -55,7 +59,6 @@
       <div class="alert alert-info text-center">You have not registered for any events yet.</div>
       {% endif %}
 
-      <!-- Back Button -->
       <div class="text-center mt-3">
         <a href="/dashboard" class="btn btn-secondary fw-semibold">⬅ Back to Dashboard</a>
       </div>
