@@ -149,8 +149,9 @@ def start():
             if role == "admin":
                 return redirect("/login")
             else:
-                return redirect("/dashboard")
+                return redirect("/dashboard")  # user direct dashboard
     return render_template("start.html")
+
 
 from datetime import date
 
@@ -381,20 +382,26 @@ def login():
     if request.method == "POST":
         username = request.form.get("username").strip()
         password = request.form.get("password").strip()
-        
+        college_id = request.form.get("college_id").strip()  # 👈 form se lo
+
         conn = get_db()
         cur = conn.cursor()
-        cur.execute("SELECT password_hash FROM admins WHERE username=? AND college_id=?", (username, session.get("college_id")))
+        cur.execute("SELECT password_hash FROM admins WHERE username=? AND college_id=?", (username, college_id))
         result = cur.fetchone()
         conn.close()
-        
+
         if result and check_password_hash(result[0], password):
             session["admin"] = username
+            session["college_id"] = college_id  # 👈 set karo session me
             return redirect("/dashboard")
         else:
-            return render_template("login.html", error="Invalid credentials")
-    
-    return render_template("login.html")
+            error = "Invalid credentials. Don't have an account? Create one below."
+            return render_template("login.html", error=error, show_register=True, college_id=college_id)
+
+    return render_template("login.html", college_id=session.get("college_id"))
+
+
+
 
 @app.route("/add_admin", methods=["GET", "POST"])
 def add_admin():
@@ -402,26 +409,34 @@ def add_admin():
         username = request.form.get("username").strip()
         password = request.form.get("password").strip()
         confirm_password = request.form.get("confirm_password").strip()
-        
+        college_id = request.form.get("college_id").strip()  # 👈 form se lo
+
+        if not college_id:
+            return render_template("add_admin.html", error="College ID missing. Please go back to Start page.")
+
         if password != confirm_password:
             return render_template("add_admin.html", error="Passwords do not match")
-        
+
         hashed = generate_password_hash(password)
         conn = get_db()
         cur = conn.cursor()
         try:
             cur.execute("INSERT INTO admins (username, password_hash, college_id) VALUES (?, ?, ?)",
-                        (username, hashed, session.get("college_id")))
+                        (username, hashed, college_id))
             conn.commit()
+            session["college_id"] = college_id  # 👈 set karo session me
             return redirect("/login?added=1")
         except sqlite3.IntegrityError:
-            error = "Username already exists"
+            conn.rollback()
+            return render_template("add_admin.html", error="Username already exists for this college.")
         finally:
             conn.close()
-        
-        return render_template("add_admin.html", error=error)
-    
+
     return render_template("add_admin.html")
+
+
+
+
 
 @app.route("/logout")
 def logout():
