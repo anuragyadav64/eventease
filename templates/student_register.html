@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Event Registration - EventEase</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      background: linear-gradient(to right, #6a11cb, #2575fc);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .card-header {
+      background: #2575fc;
+      color: white;
+      text-align: center;
+    }
+    .form-control, .form-select {
+      border-radius: 8px;
+    }
+    .btn-custom {
+      background: #6a11cb;
+      color: white;
+      border-radius: 8px;
+      transition: 0.3s;
+    }
+    .btn-custom:hover {
+      background: #2575fc;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container" style="max-width:700px;">
+  <div class="card shadow-lg border-0 rounded-3">
+    <div class="card-header">
+      <h4 class="mb-0">Register for <strong>{{ event[1] }}</strong></h4>
+      <p class="mb-0">Fill in your details below</p>
+    </div>
+    <div class="card-body p-4">
+
+      <!-- Error Alerts -->
+      {% if request.args.get("error") == "duplicate" %}
+      <div class="alert alert-warning text-center">You are already registered for this event!</div>
+      {% endif %}
+      {% if request.args.get("error") == "invalid_name" %}
+      <div class="alert alert-danger text-center">Name must contain only letters and spaces!</div>
+      {% endif %}
+      {% if request.args.get("error") == "invalid_email" %}
+      <div class="alert alert-danger text-center">Please enter a valid email address!</div>
+      {% endif %}
+      {% if request.args.get("error") == "invalid_phone" %}
+      <div class="alert alert-danger text-center">Phone number must be exactly 10 digits!</div>
+      {% endif %}
+      {% if request.args.get("error") == "invalid_rollno" %}
+      <div class="alert alert-danger text-center">Roll number is required!</div>
+      {% endif %}
+      {% if request.args.get("error") == "invalid_department" %}
+      <div class="alert alert-danger text-center">Department is required!</div>
+      {% endif %}
+      {% if request.args.get("error") == "invalid_year" %}
+      <div class="alert alert-danger text-center">Year of study is required!</div>
+      {% endif %}
+
+      <!-- Registration Form -->
+      <form method="POST" action="/register/{{ event[0] }}">
+
+        <!-- Personal Info -->
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Full Name</label>
+          <input type="text" name="name" class="form-control" placeholder="Enter your name" required>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Email</label>
+          <input type="email" name="email" class="form-control" placeholder="Enter your email" required>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Phone Number</label>
+          <input type="text" name="phone" class="form-control" maxlength="10" placeholder="Enter 10-digit phone" required>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Roll Number / Student ID</label>
+          <input type="text" name="rollno" class="form-control" placeholder="Enter your roll number" required>
+        </div>
+
+        <!-- Academic Info -->
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Department</label>
+          <select name="department" class="form-select" required>
+            <option selected disabled>Choose your department</option>
+            <option>BSc.IT</option>
+            <option>B.Com</option>
+            <option>Engineering</option>
+            <option>Other</option>
+          </select>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Year of Study</label>
+          <select name="year" class="form-select" required>
+            <option selected disabled>Select year</option>
+            <option>FY</option>
+            <option>SY</option>
+            <option>TY</option>
+          </select>
+        </div>
+
+        <!-- Role -->
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Role</label>
+          <select name="role" class="form-select" id="roleSelect" required>
+            <option value="Attendee">Attendee</option>
+            <option value="Performer">Performer</option>
+          </select>
+        </div>
+
+        <!-- Sub Event (only if Performer, dynamic from admin) -->
+        <div class="mb-3" id="subEventField" style="display:none;">
+          <label class="form-label fw-semibold">Sub Event</label>
+          <select name="sub_event" class="form-select">
+            <option selected disabled>Select sub event</option>
+            {% if event[9] %}
+              {% for sub in event[9].split(",") %}
+                <option value="{{ sub.strip() }}">{{ sub.strip() }}</option>
+              {% endfor %}
+            {% endif %}
+          </select>
+        </div>
+
+        <script>
+          document.addEventListener("DOMContentLoaded", function() {
+            const roleSelect = document.getElementById("roleSelect");
+            const subEventField = document.getElementById("subEventField");
+            roleSelect.addEventListener("change", function() {
+              subEventField.style.display = (this.value === "Performer") ? "block" : "none";
+            });
+          });
+        </script>
+
+        <!-- Buttons -->
+        <div class="d-flex justify-content-between mt-4">
+          <button type="submit" class="btn btn-custom px-4 fw-semibold">Register</button>
+          <a href="/dashboard" class="btn btn-secondary px-4 fw-semibold">Cancel</a>
+        </div>
+
+      </form>
+
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

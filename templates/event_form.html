@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Create / Edit Event - EventEase</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      background: linear-gradient(to right, #ff9966, #ff5e62);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .card-header {
+      background: #ff5e62;
+      color: white;
+      text-align: center;
+    }
+    .form-control, .form-select {
+      border-radius: 8px;
+    }
+    .btn-custom {
+      background: #ff9966;
+      color: white;
+      border-radius: 8px;
+      transition: 0.3s;
+    }
+    .btn-custom:hover {
+      background: #ff5e62;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container" style="max-width:800px;">
+  <div class="card shadow-lg border-0 rounded-3">
+    <div class="card-header">
+      <h4 class="mb-0">{{ 'Edit Event' if event else 'Create Event' }}</h4>
+    </div>
+    <div class="card-body p-4">
+
+      <form method="POST">
+
+        <!-- Title -->
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Event Title</label>
+          <input type="text" name="title" class="form-control" value="{{ event[1] if event else '' }}" required>
+        </div>
+
+        <!-- Date & Time -->
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <label class="form-label fw-semibold">Event Date</label>
+            <input type="date" name="event_date" class="form-control" value="{{ event[2] if event else '' }}" required>
+          </div>
+          <div class="col-md-6 mb-3">
+            <label class="form-label fw-semibold">Event Time</label>
+            <input type="time" name="event_time" class="form-control" value="{{ event[3] if event else '' }}" required>
+          </div>
+        </div>
+
+        <!-- Venue -->
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Venue</label>
+          <input type="text" name="venue" class="form-control" value="{{ event[4] if event else '' }}" required>
+        </div>
+
+        <!-- Category -->
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Category</label>
+          <input type="text" name="category" class="form-control" value="{{ event[5] if event else '' }}">
+        </div>
+
+        <!-- Audience -->
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Audience</label>
+          <input type="text" name="audience" class="form-control" value="{{ event[6] if event else '' }}">
+        </div>
+
+        <!-- Description -->
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Description</label>
+          <textarea name="description" class="form-control" rows="4">{{ event[7] if event else '' }}</textarea>
+        </div>
+
+        <!-- Status -->
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Status</label>
+          <select name="status" class="form-select" required>
+            <option value="Upcoming" {% if event and event[8]=='Upcoming' %}selected{% endif %}>Upcoming</option>
+            <option value="Completed" {% if event and event[8]=='Completed' %}selected{% endif %}>Completed</option>
+          </select>
+        </div>
+
+        <!-- Sub Events -->
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Sub Events (comma separated)</label>
+          <input type="text" name="sub_events" class="form-control"
+                 placeholder="e.g. Dancing,Singing,Drama,Quiz"
+                 value="{{ event[9] if event else '' }}">
+          <small class="text-muted">Enter multiple sub events separated by commas. These will show in student registration dropdown.</small>
+        </div>
+
+        <!-- Buttons -->
+        <div class="d-flex justify-content-between mt-4">
+          <button type="submit" class="btn btn-custom px-4 fw-semibold">Save</button>
+          <a href="/dashboard" class="btn btn-secondary px-4 fw-semibold">Cancel</a>
+        </div>
+
+      </form>
+
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

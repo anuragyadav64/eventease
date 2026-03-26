@@ -1,0 +1,91 @@
+/* Global styles */
+body {
+  background: #f8fafc;
+  font-family: "Segoe UI", Arial, sans-serif;
+  margin: 0;
+  color: #212529; /* Ensure consistent dark text */
+}
+
+/* Sidebar */
+.sidebar {
+  width: 220px;
+  background: #0f172a;
+  color: white;
+  min-height: 100vh;
+  padding: 20px;
+}
+
+.sidebar a {
+  color: #cbd5e1;
+  display: block;
+  padding: 10px;
+  border-radius: 6px;
+  text-decoration: none;
+  margin-bottom: 8px;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.sidebar a:hover,
+.sidebar a.active {
+  background: #2563eb;
+  color: #fff;
+}
+
+/* Cards */
+.card {
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.12);
+}
+
+/* Table */
+.table-hover tbody tr:hover {
+  background: #e0f2fe;
+}
+
+.table th {
+  background: #f1f5f9;
+  font-weight: 600;
+  color: #212529;
+}
+
+.table td {
+  color: #212529;
+  vertical-align: middle;
+  font-size: 14px;
+}
+
+/* Title link fix */
+.event-title a {
+  color: #212529 !important;
+  font-weight: 600;
+  transition: color 0.2s ease;
+}
+.event-title a:hover {
+  color: #0d6efd !important;
+}
+
+/* Badges */
+.badge {
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+/* Buttons */
+.btn {
+  border-radius: 6px;
+  font-size: 13px;
+  transition: transform 0.15s ease-in-out;
+}
+
+.btn:hover {
+  transform: scale(1.05);
+}

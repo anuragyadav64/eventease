@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>My Registrations - EventEase</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light d-flex align-items-center justify-content-center" style="min-height:100vh;">
+
+<div class="container" style="max-width:900px;">
+  <div class="card shadow-lg border-0 rounded-3">
+
+    <!-- Header -->
+    <div class="card-header bg-primary text-white text-center rounded-top-3">
+      <h4 class="mb-0">My Registrations ({{ email }})</h4>
+    </div>
+
+    <!-- Body -->
+    <div class="card-body p-4">
+
+      {% if registrations %}
+      <!-- Responsive Table -->
+      <div class="table-responsive">
+        <table class="table table-bordered table-striped align-middle">
+          <thead class="table-dark">
+            <tr>
+              <th>Event Title</th>
+              <th>Date</th>
+              <th>Venue</th>
+              <th>Role</th>
+              <th>Sub Event</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in registrations %}
+            <tr>
+              <td>{{ r[0] }}</td>
+              <td>{{ r[1] }}</td>
+              <td>{{ r[2] }}</td>
+              <td>{{ r[3] }}</td>
+              <td>{% if r[3] == "Performer" %}{{ r[4] }}{% else %}-{% endif %}</td>
+              <td>
+                <a href="/cancel_registration/{{ r[0] }}/{{ email }}" 
+                   class="btn btn-danger btn-sm fw-semibold">
+                   <i class="bi bi-x-circle"></i> Cancel
+                </a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="alert alert-info text-center">You have not registered for any events yet.</div>
+      {% endif %}
+
+      <!-- Back Button -->
+      <div class="text-center mt-3">
+        <a href="/dashboard" class="btn btn-secondary fw-semibold">⬅ Back to Dashboard</a>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
