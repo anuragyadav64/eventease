@@ -82,7 +82,7 @@ def validate_input(name, email, phone, rollno, department, year):
         return "Invalid year."
     return None
 
-def generate_qr(event_title, email):
+#def generate_qr(event_title, email):
     qr = qrcode.QRCode(version=1, box_size=10, border=5)
     qr.add_data(f"Event: {event_title}\nEmail: {email}")
     qr.make(fit=True)
@@ -98,9 +98,9 @@ def generate_qr(event_title, email):
     
     # Save the image, not the QRCode object
     img.save(filename)
-    return filename
+    return filename #
 
-def send_email(to_email, event_title, qr_path):
+#def send_email(to_email, event_title, qr_path):
     sender = os.getenv('EMAIL_USER')
     password = os.getenv('EMAIL_PASS')
 
@@ -137,7 +137,7 @@ def send_email(to_email, event_title, qr_path):
         return True
     except Exception as e:
         print(f"Email error: {e}")
-        return False
+        return False #
 
 # ===================== ROUTES =====================
 @app.route("/")
