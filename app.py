@@ -237,24 +237,48 @@ def register(event_id):
         return "Event not found", 404
     
     if request.method == "POST":
-        name = request.form.get("name").strip()
-        email = request.form.get("email").strip()
-        phone = request.form.get("phone").strip()
-        rollno = request.form.get("rollno").strip()
-        department = request.form.get("department").strip()
-        year = request.form.get("year").strip()
+        name = request.form.get("name", "").strip()
+        email = request.form.get("email", "").strip()
+        phone = request.form.get("phone", "").strip()
+        rollno = request.form.get("rollno", "").strip()
+        department = request.form.get("department", "").strip()
+        year = request.form.get("year", "").strip()
         role = request.form.get("role", "").strip()
         sub_event = request.form.get("sub_event", "").strip()
         
-        error = validate_input(name, email, phone, rollno, department, year)
-        if error:
+        # ✅ Validation fix
+        if not re.match(r"^[a-zA-Z\s]+$", name):
+            error = "Invalid name (only letters and spaces allowed)."
+            return render_template("register.html", event=event, error=error)
+        if not re.match(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", email):
+            error = "Invalid email format."
+            return render_template("register.html", event=event, error=error)
+        if not re.match(r"^\d{10}$", phone):
+            error = "Invalid phone number (10 digits only)."
+            return render_template("register.html", event=event, error=error)
+        if not re.match(r"^\d+$", rollno):
+            error = "Invalid roll number (digits only)."
+            return render_template("register.html", event=event, error=error)
+        # ✅ Department optional + "Other" allowed
+        if department and not re.match(r"^[a-zA-Z\s]+$", department) and department != "Other":
+            error = "Invalid department (letters and spaces only)."
+            return render_template("register.html", event=event, error=error)
+        # ✅ Year must match dropdown values
+        if year not in ["1st Year", "2nd Year", "3rd Year", "4th Year"]:
+            error = "Invalid year."
+            return render_template("register.html", event=event, error=error)
+        # ✅ Role must be Attendee or Performer
+        if role not in ["Attendee", "Performer"]:
+            error = "Invalid role."
             return render_template("register.html", event=event, error=error)
         
         conn = get_db()
         cur = conn.cursor()
         try:
-            cur.execute("INSERT INTO participants (event_id, name, email, phone, rollno, department, year, role, sub_event, college_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        (event_id, name, email, phone, rollno, department, year, role, sub_event, college_id))
+            cur.execute("""INSERT INTO participants 
+                (event_id, name, email, phone, rollno, department, year, role, sub_event, college_id) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (event_id, name, email, phone, rollno, department, year, role, sub_event, college_id))
             conn.commit()
             
             qr_path = generate_qr(event[1], email)
@@ -269,6 +293,7 @@ def register(event_id):
         return render_template("register.html", event=event, error=error)
     
     return render_template("register.html", event=event)
+
 
 @app.route("/event", methods=["GET", "POST"])
 @app.route("/event/<int:event_id>", methods=["GET", "POST"])
