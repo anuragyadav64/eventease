@@ -67,78 +67,76 @@ def init_db():
 init_db()
 
 # ===================== UTILS =====================
-def validate_input(name, email, phone, rollno, department, year):
-    if not re.match(r"^[a-zA-Z\s]+$", name):
-        return "Invalid name (only letters and spaces allowed)."
-    if not re.match(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", email):
-        return "Invalid email format."
-    if not re.match(r"^\d{10}$", phone):
-        return "Invalid phone number (10 digits only)."
-    if not re.match(r"^\d+$", rollno):
-        return "Invalid roll number (digits only)."
-    if not re.match(r"^[a-zA-Z\s]+$", department):
-        return "Invalid department (letters and spaces only)."
-    if year not in ["1st Year", "2nd Year", "3rd Year", "4th Year"]:
-        return "Invalid year."
-    return None
-
-#def generate_qr(event_title, email):
-    qr = qrcode.QRCode(version=1, box_size=10, border=5)
-    qr.add_data(f"Event: {event_title}\nEmail: {email}")
-    qr.make(fit=True)
+@app.route("/register/<int:event_id>", methods=["GET", "POST"])
+def register(event_id):
+    college_id = session.get("college_id")
+    if not college_id:
+        return redirect("/start")
     
-    # Create an image from the QR code
-    img = qr.make_image(fill_color="black", back_color="white")
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM events WHERE id=? AND college_id=?", (event_id, college_id))
+    event = cur.fetchone()
+    conn.close()
     
-    qr_dir = os.path.join("static", "qr")
-    os.makedirs(qr_dir, exist_ok=True)
-    safe_email = re.sub(r'[^\w\-_\.]', '_', email)
-    safe_title = re.sub(r'[^\w\-_\.]', '_', event_title)
-    filename = os.path.join(qr_dir, f"{safe_email}_{safe_title}.png")
+    if not event:
+        return "Event not found", 404
     
-    # Save the image, not the QRCode object
-    img.save(filename)
-    return filename #
-
-#def send_email(to_email, event_title, qr_path):
-    sender = os.getenv('EMAIL_USER')
-    password = os.getenv('EMAIL_PASS')
-
-    msg = MIMEMultipart()
-    msg['Subject'] = f"Registration Confirmation - {event_title}"
-    msg['From'] = sender
-    msg['To'] = to_email
-
-    body = MIMEText(f"""
-    <html>
-      <body>
-        <h2 style="color:green;">Registration Successful!</h2>
-        <p>Hello {to_email},</p>
-        <p>You have successfully registered for <b>{event_title}</b>.</p>
-        <p>Please find your QR code attached below.</p>
-        <br>
-        <p>Best regards,<br>EventEase Team</p>
-      </body>
-    </html>
-    """, 'html')
-    msg.attach(body)
-
-    with open(qr_path, 'rb') as f:
-        img = MIMEImage(f.read())
-        img.add_header('Content-Disposition', 'attachment', filename=os.path.basename(qr_path))
-        msg.attach(img)
-
-    try:
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login(sender, password)
-        server.sendmail(sender, to_email, msg.as_string())
-        server.quit()
-        return True
-    except Exception as e:
-        print(f"Email error: {e}")
-        return False #
-
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        email = request.form.get("email", "").strip()
+        phone = request.form.get("phone", "").strip()
+        rollno = request.form.get("rollno", "").strip()
+        department = request.form.get("department", "").strip()
+        year = request.form.get("year", "").strip()
+        role = request.form.get("role", "").strip()
+        sub_event = request.form.get("sub_event", "").strip()
+        
+        # Validations
+        if not re.match(r"^[a-zA-Z\s]+$", name):
+            error = "Invalid name (only letters and spaces allowed)."
+            return render_template("register.html", event=event, error=error)
+        if not re.match(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", email):
+            error = "Invalid email format."
+            return render_template("register.html", event=event, error=error)
+        if not re.match(r"^\d{10}$", phone):
+            error = "Invalid phone number (10 digits only)."
+            return render_template("register.html", event=event, error=error)
+        if not re.match(r"^\d+$", rollno):
+            error = "Invalid roll number (digits only)."
+            return render_template("register.html", event=event, error=error)
+        if department and not re.match(r"^[a-zA-Z\s]+$", department) and department != "Other":
+            error = "Invalid department (letters and spaces only)."
+            return render_template("register.html", event=event, error=error)
+        if year not in ["1st Year", "2nd Year", "3rd Year", "4th Year"]:
+            error = "Invalid year."
+            return render_template("register.html", event=event, error=error)
+        if role not in ["Attendee", "Performer"]:
+            error = "Invalid role."
+            return render_template("register.html", event=event, error=error)
+        
+        conn = get_db()
+        cur = conn.cursor()
+        try:
+            cur.execute("""INSERT INTO participants 
+                (event_id, name, email, phone, rollno, department, year, role, sub_event, college_id) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (event_id, name, email, phone, rollno, department, year, role, sub_event, college_id))
+            conn.commit()
+            
+            # QR and email functions are temporarily disabled to avoid timeout
+            # qr_path = generate_qr(event[1], email)   # commented
+            # send_email(email, event[1], qr_path)     # commented
+            
+            return redirect("/my_registrations?success=1")
+        except sqlite3.IntegrityError:
+            error = "You are already registered for this event."
+        finally:
+            conn.close()
+        
+        return render_template("register.html", event=event, error=error)
+    
+    return render_template("register.html", event=event)
 # ===================== ROUTES =====================
 @app.route("/")
 def home():
