@@ -7,9 +7,11 @@ import qrcode, smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
+from dotenv import load_dotenv
 
 app = Flask(__name__)
-app.secret_key = "eventease_secret"
+load_dotenv()
+app.secret_key = os.getenv('SECRET_KEY', 'eventease_secret')
 DB_NAME = "database.db"
 
 def get_db():
@@ -19,121 +21,82 @@ def get_db():
 def init_db():
     conn = get_db()
     cur = conn.cursor()
-
-    # Admins table
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS admins (
+    cur.execute('''CREATE TABLE IF NOT EXISTS admins (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT,
-        password_hash TEXT,
-        college_id TEXT
-    )
-    """)
-
-    # Events table
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS events (
+        username TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        college_id TEXT NOT NULL
+    )''')
+    cur.execute('''CREATE TABLE IF NOT EXISTS events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT,
-        event_date TEXT,
-        event_time TEXT,
-        venue TEXT,
-        category TEXT,
-        audience TEXT,
+        title TEXT NOT NULL,
+        event_date DATE NOT NULL,
+        event_time TEXT NOT NULL,
+        venue TEXT NOT NULL,
+        category TEXT NOT NULL,
+        audience TEXT NOT NULL,
         description TEXT,
-        status TEXT,
+        status TEXT DEFAULT 'Upcoming',
         sub_events TEXT,
-        college_id TEXT
-    )
-    """)
-
-    # Participants table
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS participants (
+        college_id TEXT NOT NULL
+    )''')
+    cur.execute('''CREATE TABLE IF NOT EXISTS participants (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        event_id INTEGER,
-        name TEXT,
-        email TEXT,
-        phone INTEGER,
-        rollno TEXT,
-        department TEXT,
-        year TEXT,
+        event_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        email TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        rollno TEXT NOT NULL,
+        department TEXT NOT NULL,
+        year TEXT NOT NULL,
         role TEXT,
         sub_event TEXT,
-        college_id TEXT,
+        college_id TEXT NOT NULL,
+        FOREIGN KEY (event_id) REFERENCES events (id),
         UNIQUE(event_id, email)
-    )
-    """)
-
-    # Feedback table
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS feedback (
+    )''')
+    cur.execute('''CREATE TABLE IF NOT EXISTS feedback (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        message TEXT,
-        college_id TEXT
-    )
-    """)
-
+        name TEXT NOT NULL,
+        message TEXT NOT NULL,
+        college_id TEXT NOT NULL
+    )''')
     conn.commit()
     conn.close()
 
-# Run init_db first
 init_db()
 
+# ===================== UTILS =====================
+def validate_input(name, email, phone, rollno, department, year):
+    if not re.match(r"^[a-zA-Z\s]+$", name):
+        return "Invalid name (only letters and spaces allowed)."
+    if not re.match(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", email):
+        return "Invalid email format."
+    if not re.match(r"^\d{10}$", phone):
+        return "Invalid phone number (10 digits only)."
+    if not re.match(r"^\d+$", rollno):
+        return "Invalid roll number (digits only)."
+    if not re.match(r"^[a-zA-Z\s]+$", department):
+        return "Invalid department (letters and spaces only)."
+    if year not in ["1st Year", "2nd Year", "3rd Year", "4th Year"]:
+        return "Invalid year."
+    return None
 
-# ==================== START PAGE ====================
-@app.route("/start", methods=["GET", "POST"])
-def start():
-    if request.method == "POST":
-        role = request.form["role"]
-        college_id = request.form["college_id"]
-        session["college_id"] = college_id
-
-        if role == "admin":
-            conn = get_db()
-            cur = conn.cursor()
-            cur.execute("SELECT id FROM admins WHERE college_id=?", (college_id,))
-            admin_exists = cur.fetchone() is not None
-            conn.close()
-
-            if admin_exists:
-                return redirect("/login")
-            else:
-                # No admin for this college yet, send to account creation first
-                return redirect(f"/add_admin?college_id={college_id}")
-        else:
-            # Student: set role and go directly to dashboard
-            session["role"] = "student"
-            return redirect("/dashboard")
-    return render_template("start.html")
-
-
-# ===================== QR + Email Helper Functions =====================
-def generate_qr(event_title, email, role, event_date=None, venue=None):
-    # Ensure QR directory exists
+def generate_qr(event_title, email):
+    qr = qrcode.QRCode(version=1, box_size=10, border=5)
+    qr.add_data(f"Event: {event_title}\nEmail: {email}")
+    qr.make(fit=True)
     qr_dir = os.path.join("static", "qr")
     os.makedirs(qr_dir, exist_ok=True)
-
-    data = (
-        f"Event: {event_title}\n"
-        f"Date: {event_date if event_date else 'TBA'}\n"
-        f"Venue: {venue if venue else 'TBA'}\n"
-        f"Participant Email: {email}\n"
-        f"Role: {role}\n"
-        "Generated by EventEase ✅"
-    )
-    qr = qrcode.make(data)
-
-    safe_title = re.sub(r"[^A-Za-z0-9_-]", "_", event_title)
-    safe_email = re.sub(r"[^A-Za-z0-9@._-]", "_", email)
+    safe_email = re.sub(r'[^\w\-_\.]', '_', email)
+    safe_title = re.sub(r'[^\w\-_\.]', '_', event_title)
     filename = os.path.join(qr_dir, f"{safe_email}_{safe_title}.png")
     qr.save(filename)
     return filename
 
 def send_email(to_email, event_title, qr_path):
-    sender = "abhisheksharma989215@gmail.com"
-    password = "etry vajm oeqx szpl"
+    sender = os.getenv('EMAIL_USER')
+    password = os.getenv('EMAIL_PASS')
 
     msg = MIMEMultipart()
     msg['Subject'] = f"Registration Confirmation - {event_title}"
@@ -148,360 +111,344 @@ def send_email(to_email, event_title, qr_path):
         <p>You have successfully registered for <b>{event_title}</b>.</p>
         <p>Please find your QR code attached below.</p>
         <br>
-        <p>Regards,<br>EventEase Team</p>
+        <p>Best regards,<br>EventEase Team</p>
       </body>
     </html>
-    """, "html")
+    """, 'html')
     msg.attach(body)
 
     with open(qr_path, 'rb') as f:
         img = MIMEImage(f.read())
-        img.add_header('Content-Disposition', 'attachment', filename="qrcode.png")
+        img.add_header('Content-Disposition', 'attachment', filename=os.path.basename(qr_path))
         msg.attach(img)
 
-    server = smtplib.SMTP_SSL("smtp.gmail.com", 465)
-    server.login(sender, password)
-    server.sendmail(sender, to_email, msg.as_string())
-    server.quit()
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(sender, password)
+        server.sendmail(sender, to_email, msg.as_string())
+        server.quit()
+        return True
+    except Exception as e:
+        print(f"Email error: {e}")
+        return False
 
-# ===================== DASHBOARD =====================
-# Root route: hamesha start page kholega
+# ===================== ROUTES =====================
 @app.route("/")
 def home():
     return redirect("/start")
 
-# Dashboard route: yahan tumhara pura dashboard code rahega
+@app.route("/start", methods=["GET", "POST"])
+def start():
+    if request.method == "POST":
+        role = request.form.get("role")
+        college = request.form.get("college")
+        if role and college:
+            session["role"] = role
+            session["college_id"] = college
+            if role == "admin":
+                return redirect("/login")
+            else:
+                return redirect("/dashboard")
+    return render_template("start.html")
+
+from datetime import date
+
 @app.route("/dashboard", methods=["GET", "POST"])
 def dashboard():
-    if "college_id" not in session:
+    college_id = session.get("college_id")
+    if not college_id:
         return redirect("/start")
-
+    
     conn = get_db()
     cur = conn.cursor()
-    today = date.today().isoformat()
-
-    cur.execute("UPDATE events SET status='Completed' WHERE event_date < ? AND status='Upcoming' AND college_id=?",
-                (today, session.get("college_id")))
-    conn.commit()
-
-    cur.execute("SELECT COUNT(*) FROM events WHERE college_id=?", (session.get("college_id"),))
-    total_events = cur.fetchone()[0]
-
-    cur.execute("SELECT COUNT(*) FROM events WHERE status='Upcoming' AND college_id=?", (session.get("college_id"),))
-    upcoming_events = cur.fetchone()[0]
-
-    cur.execute("SELECT COUNT(*) FROM events WHERE status='Completed' AND college_id=?", (session.get("college_id"),))
-    completed_events = cur.fetchone()[0]
-
-    cur.execute("SELECT COUNT(DISTINCT email) FROM participants WHERE college_id=?", (session.get("college_id"),))
-    total_participants = cur.fetchone()[0]
-
-    cur.execute("""SELECT events.*, COUNT(participants.id) as participant_count
-                   FROM events LEFT JOIN participants 
-                   ON events.id = participants.event_id AND participants.college_id=events.college_id
-                   WHERE events.college_id=? GROUP BY events.id ORDER BY event_date""",
-                (session.get("college_id"),))
+    today = date.today()
+    
+    if request.method == "POST":
+        search = request.form.get("search", "").strip()
+        if search:
+            cur.execute(
+                "SELECT * FROM events WHERE college_id=? AND title LIKE ? ORDER BY event_date",
+                (college_id, f"%{search}%")
+            )
+        else:
+            cur.execute(
+                "SELECT * FROM events WHERE college_id=? ORDER BY event_date",
+                (college_id,)
+            )
+    else:
+        cur.execute(
+            "SELECT * FROM events WHERE college_id=? ORDER BY event_date",
+            (college_id,)
+        )
+    
     events = cur.fetchall()
+    updated_events = []
+    for event in events:
+        # Convert string to date object
+        event_date = date.fromisoformat(event[2])
+        
+        # Status calculation
+        if event_date < today:
+            status = "Completed"
+        else:
+            status = "Upcoming"
+        
+        # Update DB if status changed
+        if status != event[8]:
+            cur.execute("UPDATE events SET status=? WHERE id=?", (status, event[0]))
+        
+        # Replace event[2] (string) with event_date (date object)
+        fixed_event = (
+            event[0],  # id
+            event[1],  # title
+            event_date,  # date object
+            event[3],  # time
+            event[4],  # venue
+            event[5],  # category
+            event[6],  # audience
+            event[7],  # participants
+            status,    # updated status
+            *event[9:] # rest of fields if any
+        )
+        
+        updated_events.append(fixed_event)
+    
+    conn.commit()
     conn.close()
+    
+    return render_template("index.html", events=updated_events, today=today)
 
-    feedback_success = request.args.get("feedback") == "1"
-
-    return render_template("index.html", events=events,
-                           total_events=total_events,
-                           upcoming_events=upcoming_events,
-                           completed_events=completed_events,
-                           total_participants=total_participants,
-                           today=today,
-                           student_email=session.get("student_email"),
-                           feedback_success=feedback_success)
-
-# ===================== STUDENT REGISTER =====================
-NAME_REGEX = r'^[A-Za-z\s]+$'
-EMAIL_REGEX = r'^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$'
 
 @app.route("/register/<int:event_id>", methods=["GET", "POST"])
-def student_register(event_id):
+def register(event_id):
+    college_id = session.get("college_id")
+    if not college_id:
+        return redirect("/start")
+    
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM events WHERE id=? AND college_id=?", (event_id, session.get("college_id")))
-    event = cur.fetchone()
-
-    if not event or event[8] != "Upcoming":
-        conn.close()
-        return redirect("/")
-
-    if request.method == "POST":
-        name = request.form["name"]
-        email = request.form["email"]
-        phone = request.form.get("phone")
-        rollno = request.form.get("rollno")
-        department = request.form.get("department")
-        year = request.form.get("year")
-        role = request.form.get("role")
-        sub_event = request.form.get("sub_event") if role == "Performer" else None
-
-        cur.execute("SELECT id FROM participants WHERE event_id=? AND email=? AND college_id=?",
-                    (event_id, email, session.get("college_id")))
-        existing = cur.fetchone()
-        if existing:
-            conn.close()
-            return redirect(f"/register/{event_id}?error=duplicate")
-
-        # Required fields validation
-        if not name.strip() or len(name.strip()) < 3 or not re.match(NAME_REGEX, name):
-            conn.close()
-            return redirect(f"/register/{event_id}?error=invalid_name")
-        if not email.strip() or not re.match(EMAIL_REGEX, email.lower()):
-            conn.close()
-            return redirect(f"/register/{event_id}?error=invalid_email")
-        if not phone or not phone.isdigit() or len(phone) != 10:
-            conn.close()
-            return redirect(f"/register/{event_id}?error=invalid_phone")
-        if not rollno or not rollno.strip():
-            conn.close()
-            return redirect(f"/register/{event_id}?error=invalid_rollno")
-        if not department or not department.strip():
-            conn.close()
-            return redirect(f"/register/{event_id}?error=invalid_department")
-        if not year or not year.strip():
-            conn.close()
-            return redirect(f"/register/{event_id}?error=invalid_year")
-
-        phone = int(phone)
-        rollno_value = int(rollno) if rollno.isdigit() else rollno.strip()
-
-        cur.execute("""INSERT INTO participants 
-                       (event_id, name, email, phone, rollno, department, year, role, sub_event, college_id) 
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (event_id, name, email, phone, rollno_value, department, year, role, sub_event, session.get("college_id")))
-        conn.commit()
-        conn.close()
-
-        qr_path = generate_qr(event_title=event[1], email=email, role=role, event_date=event[2], venue=event[4])
-        email_status = "sent"
-        try:
-            send_email(email, event[1], qr_path)
-        except Exception as e:
-            print("Email send failed:", e)
-            email_status = "failed"
-
-        if email_status == "sent":
-            return redirect("/dashboard?registered=1")
-        else:
-            return redirect("/dashboard?registered=1&email_error=1")
-
-    conn.close()
-    return render_template("student_register.html", event=event)
-# ===================== ADMIN DELETE EVENT =====================
-@app.route("/delete_event/<int:event_id>")
-def delete_event(event_id):
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM events WHERE id=? AND college_id=?", (event_id, session.get("college_id")))
-    conn.commit()
-    conn.close()
-    return redirect("/dashboard")
-
-# ===================== EVENT DETAILS =====================
-@app.route("/details/<int:event_id>")
-def event_details(event_id):
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM events WHERE id=? AND college_id=?", (event_id, session.get("college_id")))
+    cur.execute("SELECT * FROM events WHERE id=? AND college_id=?", (event_id, college_id))
     event = cur.fetchone()
     conn.close()
+    
     if not event:
-        return redirect("/dashboard")
-    return render_template("event_detail.html", event=event)
-
-#====================== STUDENT ALL PARTICIPANTS EVENT INFO ==============
-@app.route("/my_registrations/<email>")
-def my_registrations(email):
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT events.title, events.event_date, events.venue,
-               participants.role, participants.sub_event
-        FROM participants
-        JOIN events ON participants.event_id = events.id
-        WHERE participants.email=? AND participants.college_id=? AND events.college_id=?
-    """, (email, session.get("college_id"), session.get("college_id")))
-    registrations = cur.fetchall()
-    conn.close()
-    return render_template("my_registrations.html", registrations=registrations, email=email)
-
-#=========================== REGISTRATION POST ==============
-@app.route("/my_registrations", methods=["POST"])
-def my_registrations_post():
-    email = request.form["email"]
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT events.title, events.event_date, events.venue,
-               participants.role, participants.sub_event
-        FROM participants
-        JOIN events ON participants.event_id = events.id
-        WHERE participants.email=? AND participants.college_id=? AND events.college_id=?
-    """, (email, session.get("college_id"), session.get("college_id")))
-    registrations = cur.fetchall()
-    conn.close()
-    return render_template("my_registrations.html", registrations=registrations, email=email)
-
-#======================= EVENT CANCELLATION ======================
-@app.route("/cancel_registration/<event_title>/<email>")
-def cancel_registration(event_title, email):
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT id FROM events WHERE title=? AND college_id=?", (event_title, session.get("college_id")))
-    event = cur.fetchone()
-    if event:
-        cur.execute("DELETE FROM participants WHERE event_id=? AND email=? AND college_id=?", (event[0], email, session.get("college_id")))
-        conn.commit()
-    conn.close()
-    return redirect(f"/my_registrations/{email}")
-
-# ===================== PARTICIPANTS =====================
-@app.route("/participants/<int:id>")
-def participants(id):
-    if not session.get("admin"):
-        return redirect("/dashboard")
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM events WHERE id=? AND college_id=?", (id, session.get("college_id")))
-    event = cur.fetchone()
-    cur.execute("""SELECT name, email, phone, rollno, department, year, role, sub_event 
-                   FROM participants WHERE event_id=? AND college_id=?""", (id, session.get("college_id")))
-    data = cur.fetchall()
-    conn.close()
-    return render_template("participants.html", event=event, participants=data)
-
-# ===================== LOGIN =====================
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    error = None
-    show_register = False
+        return "Event not found", 404
+    
     if request.method == "POST":
-        username = request.form["username"]
-        password = request.form["password"]
-        college_id = request.form["college_id"]
-
+        name = request.form.get("name").strip()
+        email = request.form.get("email").strip()
+        phone = request.form.get("phone").strip()
+        rollno = request.form.get("rollno").strip()
+        department = request.form.get("department").strip()
+        year = request.form.get("year").strip()
+        role = request.form.get("role", "").strip()
+        sub_event = request.form.get("sub_event", "").strip()
+        
+        error = validate_input(name, email, phone, rollno, department, year)
+        if error:
+            return render_template("register.html", event=event, error=error)
+        
         conn = get_db()
         cur = conn.cursor()
-        cur.execute("SELECT * FROM admins WHERE username=? AND college_id=?", (username, college_id))
-        admin = cur.fetchone()
-        conn.close()
+        try:
+            cur.execute("INSERT INTO participants (event_id, name, email, phone, rollno, department, year, role, sub_event, college_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (event_id, name, email, phone, rollno, department, year, role, sub_event, college_id))
+            conn.commit()
+            
+            qr_path = generate_qr(event[1], email)
+            send_email(email, event[1], qr_path)
+            
+            return redirect("/my_registrations?success=1")
+        except sqlite3.IntegrityError:
+            error = "You are already registered for this event."
+        finally:
+            conn.close()
+        
+        return render_template("register.html", event=event, error=error)
+    
+    return render_template("register.html", event=event)
 
-        if not admin:
-            error = "No admin found with this username and college ID. Please create an account first."
-            show_register = True
-        elif not check_password_hash(admin[2], password):
-            error = "Invalid password. Please try again."
-            show_register = False
+@app.route("/event", methods=["GET", "POST"])
+@app.route("/event/<int:event_id>", methods=["GET", "POST"])
+def event_form(event_id=None):
+    if session.get("role") != "admin":
+        return redirect("/start")
+    
+    college_id = session.get("college_id")
+    conn = get_db()
+    cur = conn.cursor()
+    
+    if request.method == "POST":
+        title = request.form.get("title").strip()
+        event_date = request.form.get("event_date")
+        event_time = request.form.get("event_time").strip()
+        venue = request.form.get("venue").strip()
+        category = request.form.get("category").strip()
+        audience = request.form.get("audience").strip()
+        description = request.form.get("description").strip()
+        sub_events = request.form.get("sub_events").strip()
+        
+        if event_id:
+            cur.execute("UPDATE events SET title=?, event_date=?, event_time=?, venue=?, category=?, audience=?, description=?, sub_events=? WHERE id=? AND college_id=?",
+                        (title, event_date, event_time, venue, category, audience, description, sub_events, event_id, college_id))
         else:
-            session["admin"] = username
-            session["college_id"] = college_id
-            return redirect("/dashboard")
+            cur.execute("INSERT INTO events (title, event_date, event_time, venue, category, audience, description, sub_events, college_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (title, event_date, event_time, venue, category, audience, description, sub_events, college_id))
+        
+        conn.commit()
+        conn.close()
+        return redirect("/dashboard")
+    
+    if event_id:
+        cur.execute("SELECT * FROM events WHERE id=? AND college_id=?", (event_id, college_id))
+        event = cur.fetchone()
+        conn.close()
+        return render_template("event_form.html", event=event)
+    
+    conn.close()
+    return render_template("event_form.html")
 
-    return render_template("login.html", error=error, show_register=show_register, college_id=session.get("college_id"))
+@app.route("/details/<int:event_id>")
+def event_details(event_id):
+    college_id = session.get("college_id")
+    if not college_id:
+        return redirect("/start")
+    
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM events WHERE id=? AND college_id=?", (event_id, college_id))
+    event = cur.fetchone()
+    conn.close()
+    
+    if not event:
+        return "Event not found", 404
+    
+    return render_template("event_detail.html", event=event)
+
+@app.route("/participants/<int:event_id>")
+def participants(event_id):
+    if session.get("role") != "admin":
+        return redirect("/start")
+    
+    college_id = session.get("college_id")
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM participants WHERE event_id=? AND college_id=?", (event_id, college_id))
+    participants_list = cur.fetchall()
+    cur.execute("SELECT title FROM events WHERE id=? AND college_id=?", (event_id, college_id))
+    event_title = cur.fetchone()[0]
+    conn.close()
+    
+    return render_template("participants.html", participants=participants_list, event_title=event_title)
+
+@app.route("/my_registrations", methods=["GET", "POST"])
+def my_registrations():
+    college_id = session.get("college_id")
+    if not college_id:
+        return redirect("/start")
+    
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT p.*, e.title, e.event_date, e.event_time, e.venue
+        FROM participants p
+        JOIN events e ON p.event_id = e.id
+        WHERE p.college_id=? ORDER BY e.event_date
+    """, (college_id,))
+    registrations = cur.fetchall()
+    conn.close()
+    
+    return render_template("my_registrations.html", registrations=registrations)
+
+@app.route("/cancel_registration/<event_title>/<email>")
+def cancel_registration(event_title, email):
+    college_id = session.get("college_id")
+    if not college_id:
+        return redirect("/start")
+    
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM participants WHERE email=? AND college_id=? AND event_id IN (SELECT id FROM events WHERE title=? AND college_id=?)",
+                (email, college_id, event_title, college_id))
+    conn.commit()
+    conn.close()
+    
+    return redirect("/my_registrations?cancelled=1")
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        username = request.form.get("username").strip()
+        password = request.form.get("password").strip()
+        
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT password_hash FROM admins WHERE username=? AND college_id=?", (username, session.get("college_id")))
+        result = cur.fetchone()
+        conn.close()
+        
+        if result and check_password_hash(result[0], password):
+            session["admin"] = username
+            return redirect("/dashboard")
+        else:
+            return render_template("login.html", error="Invalid credentials")
+    
+    return render_template("login.html")
+
+@app.route("/add_admin", methods=["GET", "POST"])
+def add_admin():
+    if request.method == "POST":
+        username = request.form.get("username").strip()
+        password = request.form.get("password").strip()
+        confirm_password = request.form.get("confirm_password").strip()
+        
+        if password != confirm_password:
+            return render_template("add_admin.html", error="Passwords do not match")
+        
+        hashed = generate_password_hash(password)
+        conn = get_db()
+        cur = conn.cursor()
+        try:
+            cur.execute("INSERT INTO admins (username, password_hash, college_id) VALUES (?, ?, ?)",
+                        (username, hashed, session.get("college_id")))
+            conn.commit()
+            return redirect("/login?added=1")
+        except sqlite3.IntegrityError:
+            error = "Username already exists"
+        finally:
+            conn.close()
+        
+        return render_template("add_admin.html", error=error)
+    
+    return render_template("add_admin.html")
 
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect("/start")
 
-# ===================== ADD ADMIN =====================
-@app.route("/add_admin", methods=["GET", "POST"])
-def add_admin():
-    error = None
-    if request.method == "POST":
-        username = request.form["username"]
-        password = request.form["password"]
-        college_id = request.form["college_id"]   # user khud apna college_id dal sakta hai
-
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute("SELECT id FROM admins WHERE username=? AND college_id=?", (username, college_id))
-        existing = cur.fetchone()
-
-        if existing:
-            error = "Admin already exists for this username and college ID."
-            conn.close()
-        else:
-            cur.execute("INSERT INTO admins (username, password_hash, college_id) VALUES (?, ?, ?)",
-                        (username, generate_password_hash(password), college_id))
-            conn.commit()
-            conn.close()
-
-            return redirect("/login")  # account banane ke baad login page pe bhej do
-
-    return render_template("add_admin.html", error=error, college_id=session.get("college_id"))
-
-# ===================== LOGIN STUDENT =============
-@app.route("/student_login", methods=["GET", "POST"])
-def student_login():
-    if request.method == "POST":
-        email = request.form["email"]
-        session["student_email"] = email
-        session["role"] = "student"
-        # Student should use the same college_id set on start and directly access dashboard events
-        return redirect("/dashboard")
-    return render_template("student_login.html")
-
-# ===================== EVENT FORM =====================
-@app.route("/event", methods=["GET", "POST"])
-@app.route("/event/<int:id>", methods=["GET", "POST"])
-def event_form(id=None):
-    if not session.get("admin"):
-        return redirect("/login")
-    conn = get_db()
-    cur = conn.cursor()
-    if request.method == "POST":
-        data = (
-            request.form["title"],
-            request.form["event_date"],
-            request.form["event_time"],
-            request.form["venue"],
-            request.form["category"],
-            request.form["audience"],
-            request.form["description"],
-            request.form["status"],
-            request.form.get("sub_events"),
-            session.get("college_id")
-        )
-        if id:
-            cur.execute("""UPDATE events SET
-                           title=?, event_date=?, event_time=?, venue=?,
-                           category=?, audience=?, description=?, status=?, sub_events=?, college_id=?
-                           WHERE id=? AND college_id=?""",
-                        (*data, id, session.get("college_id")))
-        else:
-            cur.execute("""INSERT INTO events
-                           (title, event_date, event_time, venue, category, audience, description, status, sub_events, college_id)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", data)
-        conn.commit()
-        conn.close()
-        return redirect("/dashboard")
-    event = None
-    if id:
-        cur.execute("SELECT * FROM events WHERE id=? AND college_id=?", (id, session.get("college_id")))
-        event = cur.fetchone()
-    conn.close()
-    return render_template("event_form.html", event=event)
-
-# ===================== FEEDBACK FORM =====================
 @app.route("/feedback", methods=["GET", "POST"])
 def feedback():
+    college_id = session.get("college_id")
+    if not college_id:
+        return redirect("/start")
+    
     if request.method == "POST":
+        name = request.form.get("name").strip()
+        message = request.form.get("message").strip()
+        
+        if not name or not message:
+            return render_template("feedback.html", error="All fields are required")
+        
         conn = get_db()
         cur = conn.cursor()
-        cur.execute("INSERT INTO feedback (name, message, college_id) VALUES (?, ?, ?)",
-                    (request.form["name"], request.form["message"], session.get("college_id")))
+        cur.execute("INSERT INTO feedback (name, message, college_id) VALUES (?, ?, ?)", (name, message, college_id))
         conn.commit()
         conn.close()
         return redirect("/dashboard?feedback=1")
     return render_template("feedback.html")
 
-# ===================== FEEDBACK LIST =====================
 @app.route("/feedbacks")
 def feedback_list():
     conn = get_db()
@@ -510,6 +457,21 @@ def feedback_list():
     feedbacks = cur.fetchall()
     conn.close()
     return render_template("feedback_list.html", feedbacks=feedbacks)
+
+@app.route("/delete_event/<int:event_id>")
+def delete_event(event_id):
+    if session.get("role") != "admin":
+        return redirect("/start")
+    
+    college_id = session.get("college_id")
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM participants WHERE event_id=? AND college_id=?", (event_id, college_id))
+    cur.execute("DELETE FROM events WHERE id=? AND college_id=?", (event_id, college_id))
+    conn.commit()
+    conn.close()
+    
+    return redirect("/dashboard?deleted=1")
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)

@@ -149,7 +149,8 @@
     </a>
   </td>
 
-  <td>{{ e[2] }}</td>
+  <!-- Date display fixed -->
+  <td>{{ e[2].strftime("%d-%m-%Y") }}</td>
   <td>{{ e[3] }}</td>
   <td>{{ e[4] }}</td>
   <td>{{ e[5] }}</td>
@@ -167,7 +168,7 @@
     {% if e[2] == today %}
       <span class="badge bg-primary">Today</span>
     {% elif e[2] > today %}
-      <span class="countdown" data-date="{{ e[2] }}"></span>
+      <span class="countdown" data-date="{{ e[2].strftime('%Y-%m-%d') }}"></span>
     {% else %}
       <span class="badge bg-secondary">Passed</span>
     {% endif %}
