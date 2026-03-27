@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, session
+from flask import Flask, render_template, request, redirect, session, make_response
 import sqlite3
 from datetime import date
 import re, os
@@ -8,6 +8,8 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
 from dotenv import load_dotenv
+import csv
+import io
 
 app = Flask(__name__)
 load_dotenv()
@@ -295,6 +297,7 @@ def event_details(event_id):
     
     return render_template("event_detail.html", event=event)
 
+
 @app.route("/participants/<int:event_id>")
 def participants(event_id):
     if session.get("role") != "admin":
@@ -303,13 +306,64 @@ def participants(event_id):
     college_id = session.get("college_id")
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM participants WHERE event_id=? AND college_id=?", (event_id, college_id))
+    # Select only needed columns in the order expected by the template
+    cur.execute("""
+        SELECT name, email, phone, rollno, department, year, role, sub_event
+        FROM participants
+        WHERE event_id=? AND college_id=?
+    """, (event_id, college_id))
     participants_list = cur.fetchall()
     cur.execute("SELECT title FROM events WHERE id=? AND college_id=?", (event_id, college_id))
     event_title = cur.fetchone()[0]
     conn.close()
     
-    return render_template("participants.html", participants=participants_list, event_title=event_title)
+    return render_template("participants.html", participants=participants_list, event_title=event_title, event_id=event_id)
+
+
+@app.route("/download_participants/<int:event_id>")
+def download_participants(event_id):
+    if session.get("role") != "admin":
+        return redirect("/start")
+    
+    college_id = session.get("college_id")
+    conn = get_db()
+    cur = conn.cursor()
+    
+    # Get event title
+    cur.execute("SELECT title FROM events WHERE id=? AND college_id=?", (event_id, college_id))
+    event = cur.fetchone()
+    if not event:
+        conn.close()
+        return "Event not found", 404
+    event_title = event[0]
+    
+    # Get participants
+    cur.execute("""
+        SELECT name, email, phone, rollno, department, year, role, sub_event
+        FROM participants
+        WHERE event_id=? AND college_id=?
+        ORDER BY name
+    """, (event_id, college_id))
+    participants = cur.fetchall()
+    conn.close()
+    
+    # Create CSV in memory
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Write header
+    writer.writerow(['Name', 'Email', 'Phone', 'Roll No', 'Department', 'Year', 'Role', 'Sub Event'])
+    
+    # Write data rows
+    for p in participants:
+        writer.writerow(p)
+    
+    # Prepare response
+    output.seek(0)
+    response = make_response(output.getvalue())
+    response.headers['Content-Disposition'] = f'attachment; filename=participants_{event_title}.csv'
+    response.headers['Content-Type'] = 'text/csv'
+    return response
 
 @app.route("/my_registrations", methods=["GET", "POST"])
 def my_registrations():
